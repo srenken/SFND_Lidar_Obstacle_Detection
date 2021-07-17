@@ -6,6 +6,7 @@
 #include <chrono>
 #include <string>
 #include "kdtree.h"
+#include <algorithm>
 
 // Arguments:
 // window is the region to draw box around
@@ -17,8 +18,10 @@ pcl::visualization::PCLVisualizer::Ptr initScene(Box window, int zoom)
   	viewer->initCameraParameters();
   	viewer->setCameraPosition(0, 0, zoom, 0, 1, 0);
   	viewer->addCoordinateSystem (1.0);
+	
 
   	viewer->addCube(window.x_min, window.x_max, window.y_min, window.y_max, 0, 0, 1, 1, 1, "window");
+	viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_REPRESENTATION, pcl::visualization::PCL_VISUALIZER_REPRESENTATION_WIREFRAME, "window");
   	return viewer;
 }
 
@@ -75,13 +78,59 @@ void render2DTree(Node* node, pcl::visualization::PCLVisualizer::Ptr& viewer, Bo
 
 }
 
+void findPointsInProximity(int pointIdx, const std::vector<std::vector<float>> points, std::vector<int>& cluster, bool bPointsProcessed[], KdTree* tree, float distanceTol)
+{
+	/* mark point as processed
+    add point to cluster
+    nearby points = tree(point)
+    Iterate through each nearby point
+        If point has not been processed
+            Proximity(cluster) */
+
+	// mark point as processed
+	bPointsProcessed[pointIdx] = true;
+
+	// add point to cluster
+	cluster.push_back(pointIdx);
+
+	pcl::Indices pointsNearby = tree->search(points[pointIdx], distanceTol);
+
+	for (int i = 0; i < pointsNearby.size(); i++)
+	{
+		// if point hasn't been processed yet, look for additional points nearby this to add to the cluster as well	
+		if(bPointsProcessed[pointsNearby[i]] != true)
+		{
+			findPointsInProximity(pointsNearby[i], points, cluster, bPointsProcessed, tree, distanceTol);
+		}
+	}
+
+}
+
 std::vector<std::vector<int>> euclideanCluster(const std::vector<std::vector<float>>& points, KdTree* tree, float distanceTol)
 {
 
 	// TODO: Fill out this function to return list of indices for each cluster
 
+	bool bPointProcessed[points.size()] = {};
 	std::vector<std::vector<int>> clusters;
  
+	for(int pointIdx = 0; pointIdx < points.size(); pointIdx++)
+	{
+
+		// Create new cluster if point was not yet processed
+		if (bPointProcessed[pointIdx] != true)
+		{
+			// Create new cluster
+			std::vector<int> cluster;
+
+			findPointsInProximity(pointIdx, points, cluster, bPointProcessed, tree, distanceTol);
+
+			// append new cluster to the vector of clusters
+			clusters.push_back(cluster);
+		}
+
+	}
+
 	return clusters;
 
 }
@@ -100,20 +149,24 @@ int main ()
 	pcl::visualization::PCLVisualizer::Ptr viewer = initScene(window, 25);
 
 	// Create data
+	/* 2D Point Cloud */
 	std::vector<std::vector<float>> points = { {-6.2,7}, {-6.3,8.4}, {-5.2,7.1}, {-5.7,6.3}, {7.2,6.1}, {8.0,5.3}, {7.2,7.1}, {0.2,-7.1}, {1.7,-6.9}, {-1.2,-7.2}, {2.2,-8.9} };
+	
+	/* 3D Point Cloud as a test */
+	//std::vector<std::vector<float>> points = { {-6.2,7}, {-6.3,8.4}, {-5.2,7.1}, {-5.7,6.3}, {7.2,6.1}, {8.0,5.3}, {7.2,7.1}, {0.2,-7.1}, {1.7,-6.9}, {-1.2,-7.2}, {2.2,-8.9} };
 	//std::vector<std::vector<float>> points = { {-6.2,7}, {-6.3,8.4}, {-5.2,7.1}, {-5.7,6.3} };
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud = CreateData(points);
 
 	KdTree* tree = new KdTree;
   
     for (int i=0; i<points.size(); i++) 
-    	tree->insert(points[i],i); 
+    	tree->insert(points[i], i); 
 
   	int it = 0;
   	render2DTree(tree->root,viewer,window, it);
   
   	std::cout << "Test Search" << std::endl;
-  	std::vector<int> nearby = tree->search({-6,7},3.0);
+  	std::vector<int> nearby = tree->search({0,-7},2.0);
   	for(int index : nearby)
       std::cout << index << ",";
   	std::cout << std::endl;
